@@ -1,6 +1,6 @@
 # [NetGo](https://github.com/dcs4y/NetGo)
 
-## 基于 [Zinx](https://github.com/aceld/zinx "Zinx主页") 的二次开发的TCP框架。支持GPS等自定义协议的扩展。
+## 基于 [Zinx](https://github.com/aceld/zinx "Zinx主页") 二次开发的TCP框架。支持GPS等自定义协议的扩展。
 
 > ## 主要功能
 >- 注册协议

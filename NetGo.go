@@ -1,43 +1,22 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
-	"io/ioutil"
-	"strconv"
+	"github.com/dcs4y/NetGo/example/inet"
+	"github.com/dcs4y/NetGo/example/irouter"
+	"github.com/dcs4y/NetGo/gnet"
 )
 
 func main() {
-	b, err := ioutil.ReadFile("banner.txt")
-	if err != nil {
-		fmt.Println(err)
+	s := gnet.NewServer("127.0.0.1", 8888, 1024, 10, 100)
+	// 自定义协议示例
+	s.OnNewConn(inet.NewConnection)
+	// 路由添加示例 path := IMessage.GetProtocolNo() + "_" + IMessage.GetAction()
+	s.AddRouter("7878_01", &irouter.LoginRouter{})
+	s.AddRouter("7878_13", &irouter.HeartbeatRouter{})
+	// 消息发送示例
+	c, b := s.GetConnectionManager().Get("")
+	if b {
+		c.SendMsg(gnet.NewMessage("", "", ""))
 	}
-	//fmt.Println(string(b))
-	r := bufio.NewReader(bytes.NewReader(b))
-	lines := []string{}
-	i := 0
-	for {
-		i++
-		l, _, err := r.ReadLine()
-		if err != nil {
-			fmt.Println(err)
-			break
-		} else {
-			if i <= 20 {
-				lines = append(lines, fillString(string(l)))
-			} else {
-				fmt.Println(lines[i%20] + string(l))
-			}
-		}
-	}
-	fmt.Println("ok")
-}
-
-func fillString(s string) string {
-	count := 120
-	if len(s) < count {
-		return s + fmt.Sprintf("%"+strconv.Itoa(count-len(s))+"s", "")
-	}
-	return s
+	s.Start()
 }
