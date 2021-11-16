@@ -19,6 +19,9 @@ type IConnection interface {
 	SendMsg(message IMessage) error     //直接将Message数据发送数据给远程的TCP客户端(无缓冲)
 	SendBuffMsg(message IMessage) error //直接将Message数据发送给远程的TCP客户端(有缓冲)
 
+	RegisterCommandResponseChan(action string, ch chan IMessage) // 注册上行指令通道。调用者通过chan接收消息。
+	AddCommandResponse(message IMessage)                         // 向注册的上行指令通道中添加消息。调用者通过chan接收消息。
+
 	SetProperty(key string, value interface{})   //设置链接属性
 	GetProperty(key string) (interface{}, error) //获取链接属性
 	RemoveProperty(key string)                   //移除链接属性

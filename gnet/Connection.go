@@ -32,6 +32,8 @@ type Connection struct {
 	MessageChan chan []byte
 	//有缓冲管道，用于读、写两个goroutine之间的消息通信
 	MessageBuffChan chan []byte
+	// 指令通道注册器。用于下行指令后，需要等待的处理结果。
+	actionChan map[string]chan ginterface.IMessage
 
 	// Pack 封包方法(压缩数据)。由具体的协议实现。
 	Pack func(msg ginterface.IMessage) ([]byte, error)
@@ -80,6 +82,7 @@ func (c *Connection) StartWriter() {
 //Start 启动连接，让当前连接开始工作
 func (c *Connection) Start() {
 	c.Ctx, c.Cancel = context.WithCancel(context.Background())
+	c.actionChan = make(map[string]chan ginterface.IMessage)
 	//1 开启用户从客户端读取数据流程的Goroutine
 	go c.StartReader()
 	//2 开启用于写回客户端数据流程的Goroutine
@@ -177,6 +180,26 @@ func (c *Connection) SendBuffMsg(message ginterface.IMessage) error {
 	c.MessageBuffChan <- msg
 
 	return nil
+}
+
+// RegisterCommandResponseChan 注册上行指令通道。调用者通过chan接收消息。
+func (c *Connection) RegisterCommandResponseChan(action string, ch chan ginterface.IMessage) {
+	c.actionChan[action] = ch
+}
+
+// AddCommandResponse 向注册的上行指令通道中添加消息。调用者通过chan接收消息。
+func (c *Connection) AddCommandResponse(message ginterface.IMessage) {
+	if ch, b := c.actionChan[message.GetAction()]; b {
+		if len(ch) > 0 {
+			fmt.Printf("AddCommandResponse delete message by %#v", message)
+			// 删除旧的消息，防止阻塞
+			fmt.Printf("AddCommandResponse delete message %#v", <-ch)
+		} else {
+			ch <- message
+		}
+	} else {
+		fmt.Printf("AddCommandResponse no chan %#v", message)
+	}
 }
 
 //SetProperty 设置链接属性

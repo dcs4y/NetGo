@@ -89,6 +89,7 @@ func (mh *MessageHandle) doHandleRequest(request ginterface.IRequest) {
 	handler, ok := mh.routers[path]
 	if !ok {
 		fmt.Println("MessageHandle path = ", path, " is not FOUND!")
+		request.GetConnection().AddCommandResponse(request.GetMessage())
 		return
 	}
 	//执行对应处理方法
