@@ -89,6 +89,10 @@ func (mh *MessageHandle) doHandleRequest(request ginterface.IRequest) {
 	handler, ok := mh.routers[path]
 	if !ok {
 		fmt.Println("MessageHandle path = ", path, " is not FOUND!")
+		// 未注册路由的消息，默认为同步应答。将消息发送到同步应答通道等待处理。
+		if request.GetConnection().HasCommandResponseAction(request.GetMessage().GetAction()) {
+			request.GetConnection().SetCommandResponse(request.GetMessage())
+		}
 		return
 	}
 	//执行对应处理方法

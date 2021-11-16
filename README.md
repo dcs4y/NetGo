@@ -8,6 +8,9 @@
 >- 注册路由
 >> 继承ginterface.IRouter，实现Handle方法。
 >- 支持指令下发
+>> IConnection.SetCommandResponseAction
+>> IConnection.SendMsg/SendBuffMsg
+>> IConnection.GetCommandResponse
 
 > 程序示例：
 > ```

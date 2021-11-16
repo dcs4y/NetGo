@@ -67,14 +67,15 @@ func NewConnection(server ginterface.IServer, conn *net.TCPConn) (ginterface.ICo
 	//初始化Conn属性
 	connection := &Connection7878{}
 	c := gnet.Connection{
-		Server:          server,
-		Conn:            conn,
-		ConnID:          server.GetConnectionIndex(),
-		ConnName:        deviceNo,
-		IsClosed:        false,
-		MessageHandler:  server.GetMessageHandle(),
-		MessageChan:     make(chan []byte),
-		MessageBuffChan: make(chan []byte),
+		Server:              server,
+		Conn:                conn,
+		ConnID:              server.GetConnectionIndex(),
+		ConnName:            deviceNo,
+		IsClosed:            false,
+		MessageHandler:      server.GetMessageHandle(),
+		MessageChan:         make(chan []byte),
+		MessageBuffChan:     make(chan []byte),
+		commandResponseChan: make(chan ginterface.IMessage),
 	}
 	connection.Connection = c
 

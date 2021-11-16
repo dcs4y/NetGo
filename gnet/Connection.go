@@ -7,6 +7,7 @@ import (
 	"github.com/dcs4y/NetGo/ginterface"
 	"net"
 	"sync"
+	"time"
 )
 
 //Connection 链接
@@ -32,6 +33,10 @@ type Connection struct {
 	MessageChan chan []byte
 	//有缓冲管道，用于读、写两个goroutine之间的消息通信
 	MessageBuffChan chan []byte
+
+	commandResponseAction map[string]bool
+	//下行指令同步应答的消息通道。用于下行指令的结果同步。
+	commandResponseChan chan ginterface.IMessage
 
 	// Pack 封包方法(压缩数据)。由具体的协议实现。
 	Pack func(msg ginterface.IMessage) ([]byte, error)
@@ -112,7 +117,10 @@ func (c *Connection) Stop() {
 	c.Server.GetConnectionManager().Remove(c)
 
 	//关闭该链接全部管道
+	close(c.MessageChan)
 	close(c.MessageBuffChan)
+	close(c.commandResponseChan)
+
 	//设置标志位
 	c.IsClosed = true
 }
@@ -176,6 +184,50 @@ func (c *Connection) SendBuffMsg(message ginterface.IMessage) error {
 	//写回客户端
 	c.MessageBuffChan <- msg
 
+	return nil
+}
+
+// SetCommandResponseAction 注册需要处理的应答指令
+func (c *Connection) SetCommandResponseAction(action string) {
+	c.commandResponseAction[action] = true
+}
+
+// HasCommandResponseAction 检测是否已注册需要处理的应答指令
+func (c *Connection) HasCommandResponseAction(action string) bool {
+	_, b := c.commandResponseAction[action]
+	return b
+}
+
+// SetCommandResponse 设置下行指令同步应答的消息
+func (c *Connection) SetCommandResponse(message ginterface.IMessage) {
+	if c.commandResponseChan != nil && !c.IsClosed {
+		if len(c.commandResponseChan) > 0 {
+			// 丢弃同一连接的多余的应答消息
+			<-c.commandResponseChan
+		}
+		c.commandResponseChan <- message
+	}
+}
+
+// GetCommandResponse 获取下行指令同步应答的消息
+func (c *Connection) GetCommandResponse(timeout time.Duration) ginterface.IMessage {
+	if c.commandResponseChan != nil && !c.IsClosed {
+	loop:
+		for {
+			select {
+			case message := <-c.commandResponseChan: // 等待命令下行后的应答消息
+				{
+					return message
+					break loop
+				}
+			case <-time.After(timeout): // 超时
+				{
+					fmt.Println("Timed out")
+					break loop
+				}
+			}
+		}
+	}
 	return nil
 }
 
