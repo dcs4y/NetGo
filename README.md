@@ -4,13 +4,17 @@
 
 > ## 主要功能
 >- 注册协议
->> 继承gnet.Connection，注册StartReader和Pack回调方法。
+>>1. 继承gnet.Connection，注册StartReader和Pack回调方法。
 >- 注册路由
->> 继承ginterface.IRouter，实现Handle方法。
->- 支持指令下发
->> IConnection.SetCommandResponseAction
->> IConnection.SendMsg/SendBuffMsg
->> IConnection.GetCommandResponse
+>>1. 继承ginterface.IRouter，实现Handle方法。
+>- 支持指令下发异步处理
+>>1. IConnection.SendMsg(message)/IConnection.SendBuffMsg(message)
+>>2. 继承ginterface.IRouter，实现Handle方法。
+>- 支持指令下发同步处理
+>>1. ch := make(chan ginterface.IMessage)
+>>2. IConnection.RegisterCommandResponseChan(action,ch)
+>>3. IConnection.SendMsg(message)/IConnection.SendBuffMsg(message)
+>>4. wait(ch)
 
 > 程序示例：
 > ```
@@ -29,3 +33,4 @@
 > 	s.Start()
 > }
 > ```
+> 更多示例请参考example包。
