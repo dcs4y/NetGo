@@ -19,24 +19,25 @@ type Connection struct {
 	ConnID uint64
 	// 当前连接名称，设备序列号 IMEI号
 	ConnName string
+	// 当前连接支持的协议号
+	ProtocolNo string
 	//消息管理MsgID和对应处理方法的消息管理模块
 	MessageHandler ginterface.IMessageHandle
 	//告知该链接已经退出/停止的channel
 	Ctx    context.Context
 	Cancel context.CancelFunc
 
-	// StartReader 读消息Goroutine，用于从客户端中读取数据。由子类实现。
+	// StartReader 读消息Goroutine，用于从客户端中读取数据。由具体的协议实现。
 	StartReader func()
+	// Pack 封包方法(压缩数据)。由具体的协议实现。
+	Pack func(msg ginterface.IMessage) ([]byte, error)
 
 	//无缓冲管道，用于读、写两个goroutine之间的消息通信
 	MessageChan chan []byte
 	//有缓冲管道，用于读、写两个goroutine之间的消息通信
 	MessageBuffChan chan []byte
 	// 指令通道注册器。用于下行指令后，需要等待的处理结果。
-	actionChan map[string]chan ginterface.IMessage
-
-	// Pack 封包方法(压缩数据)。由具体的协议实现。
-	Pack func(msg ginterface.IMessage) ([]byte, error)
+	ActionChan map[string]chan ginterface.IMessage
 
 	// 当前连接的锁
 	sync.RWMutex
@@ -52,7 +53,6 @@ type Connection struct {
 func (c *Connection) StartWriter() {
 	fmt.Println("[Writer Goroutine is running]")
 	defer fmt.Println(c.RemoteAddr().String(), "[conn Writer exit!]")
-
 	for {
 		select {
 		case data := <-c.MessageChan:
@@ -82,7 +82,7 @@ func (c *Connection) StartWriter() {
 //Start 启动连接，让当前连接开始工作
 func (c *Connection) Start() {
 	c.Ctx, c.Cancel = context.WithCancel(context.Background())
-	c.actionChan = make(map[string]chan ginterface.IMessage)
+	c.ActionChan = make(map[string]chan ginterface.IMessage)
 	//1 开启用户从客户端读取数据流程的Goroutine
 	go c.StartReader()
 	//2 开启用于写回客户端数据流程的Goroutine
@@ -117,6 +117,9 @@ func (c *Connection) Stop() {
 	//关闭该链接全部管道
 	close(c.MessageChan)
 	close(c.MessageBuffChan)
+	for _, ch := range c.ActionChan {
+		close(ch)
+	}
 	//设置标志位
 	c.IsClosed = true
 }
@@ -148,17 +151,14 @@ func (c *Connection) SendMsg(message ginterface.IMessage) error {
 	if c.IsClosed == true {
 		return errors.New("connection closed when send msg")
 	}
-
 	//将data封包，并且发送
 	msg, err := c.Pack(message)
 	if err != nil {
 		fmt.Println(err)
 		return errors.New("Pack error msg ")
 	}
-
 	//写回客户端
 	c.MessageChan <- msg
-
 	return nil
 }
 
@@ -169,35 +169,40 @@ func (c *Connection) SendBuffMsg(message ginterface.IMessage) error {
 	if c.IsClosed == true {
 		return errors.New("Connection closed when send buff msg")
 	}
-
 	//将data封包，并且发送
 	msg, err := c.Pack(message)
 	if err != nil {
 		fmt.Println(err)
 		return errors.New("Pack error msg ")
 	}
-
 	//写回客户端
 	c.MessageBuffChan <- msg
-
 	return nil
 }
 
 // RegisterCommandResponseChan 注册上行指令通道。调用者通过chan接收消息。
 func (c *Connection) RegisterCommandResponseChan(action string, ch chan ginterface.IMessage) {
-	c.actionChan[action] = ch
+	c.Lock()
+	defer c.Unlock()
+	c.ActionChan[action] = ch
 }
 
 // AddCommandResponse 向注册的上行指令通道中添加消息。调用者通过chan接收消息。
 func (c *Connection) AddCommandResponse(message ginterface.IMessage) {
-	if ch, b := c.actionChan[message.GetAction()]; b {
+	c.Lock()
+	defer c.Unlock()
+	if ch, b := c.ActionChan[message.GetAction()]; b {
 		if len(ch) > 0 {
-			fmt.Printf("AddCommandResponse delete message by %#v", message)
 			// 删除旧的消息，防止阻塞
 			fmt.Printf("AddCommandResponse delete message %#v", <-ch)
-		} else {
-			ch <- message
 		}
+		// 待添加的新消息
+		fmt.Printf("AddCommandResponse add message %#v", message)
+		ch <- message
+		// 从缓存中删除引用，不再使用
+		delete(c.ActionChan, message.GetAction())
+		// 关闭通道，不再添加消息
+		close(ch)
 	} else {
 		fmt.Printf("AddCommandResponse no chan %#v", message)
 	}
@@ -210,7 +215,6 @@ func (c *Connection) SetProperty(key string, value interface{}) {
 	if c.Property == nil {
 		c.Property = make(map[string]interface{})
 	}
-
 	c.Property[key] = value
 }
 
@@ -218,11 +222,9 @@ func (c *Connection) SetProperty(key string, value interface{}) {
 func (c *Connection) GetProperty(key string) (interface{}, error) {
 	c.PropertyLock.Lock()
 	defer c.PropertyLock.Unlock()
-
 	if value, ok := c.Property[key]; ok {
 		return value, nil
 	}
-
 	return nil, errors.New("no Property found")
 }
 
@@ -240,5 +242,5 @@ func (c *Connection) Context() context.Context {
 
 // GetProtocolNo 获取连接的协议
 func (c *Connection) GetProtocolNo() string {
-	return ""
+	return c.ProtocolNo
 }

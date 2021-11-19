@@ -31,6 +31,7 @@ func NewConnection(server ginterface.IServer, conn *net.TCPConn) (ginterface.ICo
 		return nil, errors.New("未读取到起始位信息，连接建立失败！")
 	}
 
+	// 获取连接的开始标识
 	var protocolNo string
 	// 7878|7979 (0x78=120,0x79=121)
 	if buf[0] == 120 || buf[0] == 121 {
@@ -46,6 +47,7 @@ func NewConnection(server ginterface.IServer, conn *net.TCPConn) (ginterface.ICo
 			return nil, errors.New("未读取到完整协议头，连接建立失败！")
 		}
 		if buf[0] == 120 {
+			// 深圳市几米物联有限公司
 			protocolNo = "7878"
 		} else if buf[0] == 121 {
 			protocolNo = "7979"
@@ -67,16 +69,18 @@ func NewConnection(server ginterface.IServer, conn *net.TCPConn) (ginterface.ICo
 	//初始化Conn属性
 	connection := &Connection7878{}
 	c := gnet.Connection{
-		Server:              server,
-		Conn:                conn,
-		ConnID:              server.GetConnectionIndex(),
-		ConnName:            deviceNo,
-		IsClosed:            false,
-		MessageHandler:      server.GetMessageHandle(),
-		MessageChan:         make(chan []byte),
-		MessageBuffChan:     make(chan []byte),
-		commandResponseChan: make(chan ginterface.IMessage),
+		Server:          server,
+		Conn:            conn,
+		ConnID:          server.GetConnectionIndex(),
+		ConnName:        deviceNo,
+		ProtocolNo:      protocolNo,
+		IsClosed:        false,
+		MessageHandler:  server.GetMessageHandle(),
+		MessageChan:     make(chan []byte),
+		MessageBuffChan: make(chan []byte),
+		ActionChan:      make(map[string]chan ginterface.IMessage),
 	}
+
 	connection.Connection = c
 
 	connection.StartReader = connection.iStartReader
@@ -141,12 +145,6 @@ func (c *Connection7878) iPack(msg ginterface.IMessage) ([]byte, error) {
 	result := strings.ToUpper(msg.GetProtocolNo() + msg.GetDataLen() + msg.GetAction() + msg.GetBody() + msg.GetIndex() + checkCode + c.getMessageEnd())
 	//fmt.Println("7878封包结果：" + result)
 	return hex.DecodeString(result)
-}
-
-// GetProtocolNo 获取连接的开始标识
-func (c *Connection7878) GetProtocolNo() string {
-	// 深圳市几米物联有限公司
-	return "7878"
 }
 
 // GetMessageEnd 获取连接的结束标识
