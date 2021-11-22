@@ -37,7 +37,7 @@ type Connection struct {
 	//有缓冲管道，用于读、写两个goroutine之间的消息通信
 	MessageBuffChan chan []byte
 	// 指令通道注册器。用于下行指令后，需要等待的处理结果。
-	ActionChan map[string]chan ginterface.IMessage
+	actionChan map[string]chan ginterface.IMessage
 
 	// 当前连接的锁
 	sync.RWMutex
@@ -82,7 +82,7 @@ func (c *Connection) StartWriter() {
 //Start 启动连接，让当前连接开始工作
 func (c *Connection) Start() {
 	c.Ctx, c.Cancel = context.WithCancel(context.Background())
-	c.ActionChan = make(map[string]chan ginterface.IMessage)
+	c.actionChan = make(map[string]chan ginterface.IMessage)
 	//1 开启用户从客户端读取数据流程的Goroutine
 	go c.StartReader()
 	//2 开启用于写回客户端数据流程的Goroutine
@@ -117,7 +117,7 @@ func (c *Connection) Stop() {
 	//关闭该链接全部管道
 	close(c.MessageChan)
 	close(c.MessageBuffChan)
-	for _, ch := range c.ActionChan {
+	for _, ch := range c.actionChan {
 		close(ch)
 	}
 	//设置标志位
@@ -181,26 +181,30 @@ func (c *Connection) SendBuffMsg(message ginterface.IMessage) error {
 }
 
 // RegisterCommandResponseChan 注册上行指令通道。调用者通过chan接收消息。
-func (c *Connection) RegisterCommandResponseChan(action string, ch chan ginterface.IMessage) {
+func (c *Connection) RegisterCommandResponseChan(action string) chan ginterface.IMessage {
 	c.Lock()
 	defer c.Unlock()
-	c.ActionChan[action] = ch
+	// 内部创建带缓冲的通道，调用者不关心创建过程。
+	ch := make(chan ginterface.IMessage, 1)
+	c.actionChan[action] = ch
+	return ch
 }
 
 // AddCommandResponse 向注册的上行指令通道中添加消息。调用者通过chan接收消息。
 func (c *Connection) AddCommandResponse(message ginterface.IMessage) {
 	c.Lock()
 	defer c.Unlock()
-	if ch, b := c.ActionChan[message.GetAction()]; b {
+	if ch, b := c.actionChan[message.GetAction()]; b {
 		if len(ch) > 0 {
 			// 删除旧的消息，防止阻塞
 			fmt.Printf("AddCommandResponse delete message %#v", <-ch)
 		}
 		// 待添加的新消息
 		fmt.Printf("AddCommandResponse add message %#v", message)
+		// 若ch为无缓冲通道，此处会等待，可能造成阻塞，以至程序不能返回，最终不能执行c.Unlock()。
 		ch <- message
 		// 从缓存中删除引用，不再使用
-		delete(c.ActionChan, message.GetAction())
+		delete(c.actionChan, message.GetAction())
 		// 关闭通道，不再添加消息
 		close(ch)
 	} else {

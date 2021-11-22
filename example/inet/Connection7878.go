@@ -78,7 +78,6 @@ func NewConnection(server ginterface.IServer, conn *net.TCPConn) (ginterface.ICo
 		MessageHandler:  server.GetMessageHandle(),
 		MessageChan:     make(chan []byte),
 		MessageBuffChan: make(chan []byte),
-		ActionChan:      make(map[string]chan ginterface.IMessage),
 	}
 
 	connection.Connection = c
